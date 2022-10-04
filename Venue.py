@@ -47,7 +47,7 @@ class Sheet(Venue):
                 else:
                     super(Sheet, self).__init__(int(val))
             elif len(val) == 1:
-                super(Sheet, self).__init__(ord(val[0]) - ord('a') + 1)
+                super(Sheet, self).__init__(ord(val[0]) - ord('a'))
             else:
                 raise ValueError("{} is not a valid Sheet ID".format(val))
         else:
@@ -55,7 +55,7 @@ class Sheet(Venue):
 
     def __str__(self) -> str:
         if Sheet.use_letters:
-            return chr(self.identifier).upper()
+            return chr(self.identifier + ord('a')).upper()
         else:
             return str(self.identifier)
 

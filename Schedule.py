@@ -15,16 +15,18 @@ from ScheduleOptimizer import ScheduleOptimizer
 
 class Schedule:
     def __init__(self, games: typing.List[Game] = None,
-                 assignments: typing.List[typing.List[Team]] = None):
+                 assignments: typing.List[typing.List[Team]] = None,
+                 teams_per_game: typing.Optional[int] = None):
         self._games: typing.List[Game] = games if games is not None else []
         self._assignments: typing.List[typing.List[Team]] = assignments if assignments is not None else []
         if not len(self._assignments) == len(self._games):
             if len(self._assignments) > 0:
                 raise ValueError("Improper matchup between number of games and number of team assignments")
             self._assignments = [[]] * len(self._games)
+        self._teams_per_game: typing.Optional[int] = teams_per_game
 
     def __str__(self):
-        return "\n".join(["{}: {}".format(game, teams) for game, teams in zip(self._games, self._assignments)])
+        return "\n".join(["{}: {}".format(game, " vs. ".join(team.name for team in teams)) for game, teams in zip(self._games, self._assignments)])
 
     def start_times(self) -> typing.Set[datetime.datetime]:
         return set(game.game_start for game in self._games)
@@ -51,10 +53,12 @@ class Schedule:
         return len(set(len(matchup) for matchup in self._assignments)) == 1
 
     def teams_per_game(self) -> int:
-        teams_per_game = set(len(matchup) for matchup in self._assignments if len(matchup) != 0)
-        if len(teams_per_game) != 1:
-            raise RuntimeError("Uneven number of teams assigned to each game")
-        return teams_per_game.pop()
+        if self._teams_per_game is None:
+            teams_per_game_set = set(len(matchup) for matchup in self._assignments if len(matchup) != 0)
+            if len(teams_per_game_set) != 1:
+                raise RuntimeError("Uneven number of teams assigned to each game")
+            self._teams_per_game = teams_per_game_set.pop()
+        return self._teams_per_game
 
     def games_against_matrix(self) -> np.ndarray:
         num_teams = len(self.teams())
@@ -121,7 +125,8 @@ class Schedule:
                        game_times: typing.Union[datetime.time, typing.List[datetime.time]],
                        weekdays: typing.Union[None, Weekday, typing.List[Weekday]] = None,
                        game_length: typing.Optional[datetime.timedelta] = None,
-                       venues: typing.Optional[typing.List[Venue]] = None):
+                       venues: typing.Optional[typing.List[Venue]] = None,
+                       teams_per_game: typing.Optional[int] = None):
         if weekdays is None or (isinstance(weekdays, list) and len(weekdays) == 0):
             weekdays = [Weekday.from_date(start_date)]
         if isinstance(weekdays, Weekday):
@@ -140,9 +145,11 @@ class Schedule:
             num_weeks += 1
         assert(max(days) <= end_date)
         if venues is None or len(venues) == 0:
-            return Schedule(games=[Game(d, t, game_length) for d, t in itertools.product(days, game_times)])
+            return Schedule(games=[Game(d, t, game_length) for d, t in itertools.product(days, game_times)],
+                            teams_per_game=teams_per_game)
         else:
-            return Schedule(games=[Game(d, t, game_length, v) for d, t, v in itertools.product(days, game_times, venues)])
+            return Schedule(games=[Game(d, t, game_length, v) for d, t, v in itertools.product(days, game_times, venues)],
+                            teams_per_game=teams_per_game)
 
     def populate_venues(self, venues: typing.List[Venue]):
         if not all(g.venue is None for g in self._games):
@@ -162,5 +169,5 @@ class Schedule:
             optimizer.require_num_games(required_games)
         else:
             optimizer.maximize_games_objective(weight=1.0)
-        optimizer.disallow_double_headers()
+        # optimizer.disallow_double_headers()
         self._assignments = optimizer.solve()
